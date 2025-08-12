@@ -4,12 +4,10 @@ import { logSuspicious } from "../utils/suspiciousLog.js";
 export function preventDuplicateRequests(ttlMs = 5000) {
   const recentRequests = new Map();
   return (req, res, next) => {
-    // Пропускаем GET запросы (они обычно не дублируются)
     if (req.method === "GET") {
       return next();
     }
 
-    // Пропускаем запросы к документации
     if (req.originalUrl.includes("/api/docs") || req.originalUrl === "/") {
       return next();
     }

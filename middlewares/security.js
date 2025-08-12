@@ -8,7 +8,6 @@ export function securityMiddlewares(app, allowedOrigins = []) {
 
   // Настройка Helmet в зависимости от окружения
   if (isProduction) {
-    // Строгие настройки для продакшена
     app.use(
       helmet({
         contentSecurityPolicy: {
@@ -40,7 +39,6 @@ export function securityMiddlewares(app, allowedOrigins = []) {
   app.use(cookieParser());
   app.use(express.json({ limit: "100kb" }));
 
-  // CORS конфигурация в зависимости от окружения
   app.use(
     cors({
       origin: (origin, cb) => {

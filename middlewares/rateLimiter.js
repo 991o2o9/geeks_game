@@ -3,9 +3,8 @@ import { logSuspicious } from "../utils/suspiciousLog.js";
 
 export const ipRateLimiter = rateLimit({
   windowMs: 60000,
-  max: process.env.NODE_ENV === "production" ? 20 : 30, // Более строгий лимит в production
+  max: process.env.NODE_ENV === "production" ? 20 : 30,
   skip: (req) => {
-    // Пропускаем запросы к документации и health check
     return req.originalUrl.includes("/api/docs") || req.originalUrl === "/";
   },
   handler: (req, res, _, opts) => {
