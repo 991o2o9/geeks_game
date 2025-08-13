@@ -232,18 +232,19 @@ router.post("/register", async (req, res) => {
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Вход пользователя в систему
+ *     summary: Вход или регистрация пользователя
  *     description: |
- *       Аутентификация существующего пользователя по имени и паролю.
+ *       Аутентификация пользователя по имени и паролю.
  *
  *       **Особенности:**
- *       - Только для существующих пользователей
- *       - При успешном входе возвращаются JWT токены (access и refresh)
+ *       - Если пользователь не существует, он будет автоматически создан (регистрация)
+ *       - Если пользователь существует, выполняется вход
+ *       - При успешной операции возвращаются JWT токены (access и refresh)
  *       - Токены также сохраняются в HTTP-only cookies
  *       - Защищен от брутфорс атак (ограничение попыток входа)
  *
  *       **Безопасность:**
- *       - Проверка существования пользователя
+ *       - Автоматическая регистрация новых пользователей
  *       - Используется защита от повторных запросов
  *       - Rate limiting для предотвращения атак
  *     tags: [Аутентификация]
@@ -265,14 +266,20 @@ router.post("/register", async (req, res) => {
  *             description: HTTP-only cookies с токенами
  *             schema:
  *               type: string
+ *       201:
+ *         description: Пользователь успешно зарегистрирован и вошел в систему
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
  *       400:
  *         description: Отсутствуют обязательные поля (username или password)
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       401:
- *         description: Неверные учетные данные или пользователь не существует
+ *       409:
+ *         description: Пользователь с таким именем уже существует
  *         content:
  *           application/json:
  *             schema:
@@ -294,21 +301,29 @@ router.post("/login", loginBruteForceProtection(), async (req, res) => {
   }
 
   try {
-    const user = await authenticateUser(username, password);
+    // Сначала пытаемся найти существующего пользователя
+    let user = await authenticateUser(username, password);
+    let isNewUser = false;
 
+    // Если пользователь не найден, регистрируем его
     if (!user) {
-      const rec = req._loginAttemptRecord;
-      rec.count++;
-      await rec.save();
-      return res.status(401).json({
-        error: "Invalid credentials",
-        message:
-          "Username not found. Please register first or check your username.",
-      });
+      try {
+        user = await registerUser(username, password);
+        isNewUser = true;
+        console.log(`New user registered via login: ${username}`);
+      } catch (registerError) {
+        if (registerError.message === "Username already taken") {
+          return res.status(409).json({
+            error: "Username already taken",
+            message:
+              "A user with this username already exists. Please choose a different username.",
+          });
+        }
+        throw registerError;
+      }
     }
 
-    await LoginAttempt.deleteOne({ ip: req.ip });
-
+    // Создаем токены для пользователя
     const accessToken = signAccessToken({ sub: user.id });
     const refreshToken = signRefreshToken({ sub: user.id });
 
@@ -324,13 +339,22 @@ router.post("/login", loginBruteForceProtection(), async (req, res) => {
       sameSite: "lax",
     });
 
-    res.json({
-      accessToken,
-      refreshToken,
-      message: "Login successful",
-    });
+    // Возвращаем соответствующий статус и сообщение
+    if (isNewUser) {
+      res.status(201).json({
+        accessToken,
+        refreshToken,
+        message: "User registered and logged in successfully",
+      });
+    } else {
+      res.json({
+        accessToken,
+        refreshToken,
+        message: "Login successful",
+      });
+    }
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("Login/Register error:", error);
     const rec = req._loginAttemptRecord;
     rec.count++;
     await rec.save();
