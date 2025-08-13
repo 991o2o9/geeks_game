@@ -132,119 +132,21 @@ async function registerUser(username, password) {
 
 /**
  * @swagger
- * /auth/register:
- *   post:
- *     summary: Регистрация нового пользователя
- *     description: |
- *       Создание нового аккаунта в системе.
- *
- *       **Особенности:**
- *       - Проверка уникальности username
- *       - Автоматическое создание userId
- *       - Начальный баланс монет: 0
- *       - Защита от дублирования учетных записей
- *
- *       **Безопасность:**
- *       - Валидация входных данных
- *       - Проверка существования пользователя
- *       - Защита от повторных запросов
- *     tags: [Аутентификация]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
- *     responses:
- *       201:
- *         description: Пользователь успешно зарегистрирован
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/LoginResponse'
- *       400:
- *         description: Отсутствуют обязательные поля
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       409:
- *         description: Пользователь с таким именем уже существует
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       500:
- *         description: Ошибка сервера
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.post("/register", async (req, res) => {
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res
-      .status(400)
-      .json({ error: "Username and password are required" });
-  }
-
-  try {
-    const user = await registerUser(username, password);
-
-    // Создаем токены для нового пользователя
-    const accessToken = signAccessToken({ sub: user.id });
-    const refreshToken = signRefreshToken({ sub: user.id });
-
-    await RefreshToken.create({
-      token: refreshToken,
-      userId: user.id,
-      expiresAt: new Date(Date.now() + 7 * 864e5),
-    });
-
-    res.cookie("accessToken", accessToken, { httpOnly: true, sameSite: "lax" });
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      sameSite: "lax",
-    });
-
-    res.status(201).json({
-      accessToken,
-      refreshToken,
-      message: "User registered successfully",
-    });
-  } catch (error) {
-    if (error.message === "Username already taken") {
-      return res.status(409).json({
-        error: "Username already taken",
-        message:
-          "A user with this username already exists. Please choose a different username.",
-      });
-    }
-
-    console.error("Registration error:", error);
-    res.status(500).json({ error: "Failed to register user" });
-  }
-});
-
-/**
- * @swagger
  * /auth/login:
  *   post:
- *     summary: Вход или регистрация пользователя
+ *     summary: Вход в систему
  *     description: |
  *       Аутентификация пользователя по имени и паролю.
  *
  *       **Особенности:**
- *       - Если пользователь не существует, он будет автоматически создан (регистрация)
+ *       - Если пользователь не существует, он будет автоматически создан
  *       - Если пользователь существует, выполняется вход
  *       - При успешной операции возвращаются JWT токены (access и refresh)
  *       - Токены также сохраняются в HTTP-only cookies
  *       - Защищен от брутфорс атак (ограничение попыток входа)
  *
  *       **Безопасность:**
- *       - Автоматическая регистрация новых пользователей
+ *       - Автоматическое создание новых пользователей
  *       - Используется защита от повторных запросов
  *       - Rate limiting для предотвращения атак
  *     tags: [Аутентификация]
@@ -267,19 +169,13 @@ router.post("/register", async (req, res) => {
  *             schema:
  *               type: string
  *       201:
- *         description: Пользователь успешно зарегистрирован и вошел в систему
+ *         description: Пользователь успешно создан и вошел в систему
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/LoginResponse'
  *       400:
  *         description: Отсутствуют обязательные поля (username или password)
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       409:
- *         description: Пользователь с таким именем уже существует
  *         content:
  *           application/json:
  *             schema:
