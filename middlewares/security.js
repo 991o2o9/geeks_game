@@ -6,28 +6,24 @@ import express from "express";
 export function securityMiddlewares(app, allowedOrigins = []) {
   const isProduction = process.env.NODE_ENV === "production";
 
-  // Настройка Helmet в зависимости от окружения
   if (isProduction) {
     app.use(
       helmet({
         contentSecurityPolicy: {
           directives: {
-            defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrc: ["'self'"],
-            imgSrc: ["'self'", "data:", "https:"],
+            defaultSrc: ["'self'", "*"],
+            styleSrc: ["'self'", "'unsafe-inline'", "*"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*"],
+            imgSrc: ["'self'", "data:", "https:", "*"],
+            connectSrc: ["'self'", "*"],
           },
         },
-        crossOriginEmbedderPolicy: true,
-        hsts: {
-          maxAge: 31536000,
-          includeSubDomains: true,
-          preload: true,
-        },
+        crossOriginEmbedderPolicy: false,
+        hsts: false,
       })
     );
   } else {
-    // Более мягкие настройки для разработки
+    // dev режим
     app.use(
       helmet({
         contentSecurityPolicy: false,
@@ -43,12 +39,14 @@ export function securityMiddlewares(app, allowedOrigins = []) {
     cors({
       origin: (origin, cb) => {
         if (!isProduction) {
-          // В режиме разработки разрешаем все origins
           return cb(null, true);
         }
-
-        // В продакшене строго проверяем разрешенные origins
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Production: мягкая проверка
+        if (
+          !origin ||
+          allowedOrigins.includes(origin) ||
+          origin.includes("yourdomain.com")
+        ) {
           return cb(null, true);
         }
         return cb(new Error("CORS blocked"));
