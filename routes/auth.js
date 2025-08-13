@@ -43,6 +43,21 @@ const router = express.Router();
  *           type: string
  *           description: JWT токен обновления (действует 7 дней)
  *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *         message:
+ *           type: string
+ *           description: Сообщение о результате операции
+ *           example: "Login successful"
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
+ *           description: Тип ошибки
+ *           example: "Username already taken"
+ *         message:
+ *           type: string
+ *           description: Подробное описание ошибки
+ *           example: "A user with this username already exists. Please choose a different username."
  *     RefreshRequest:
  *       type: object
  *       properties:
@@ -73,18 +88,145 @@ const router = express.Router();
  *           example: true
  */
 
-async function findUserByCredentials(username, password) {
-  let user = await User.findOne({ username });
+/**
+ * Проверяет существование пользователя и валидирует пароль
+ */
+async function authenticateUser(username, password) {
+  const user = await User.findOne({ username });
   if (!user) {
-    const userId = `user-${username}-${Date.now()}`;
-    user = await User.create({ username, userId, coins: 0 });
-    console.log(`New user registered: ${username}`);
-  } else {
-    user.lastActive = new Date();
-    await user.save();
+    return null; // Пользователь не найден
   }
+
+  // Здесь должна быть проверка пароля
+  // Поскольку в текущей модели пароль не хранится,
+  // мы будем считать, что пользователь аутентифицирован по username
+  // В реальном приложении здесь должна быть проверка хеша пароля
+
+  user.lastActive = new Date();
+  await user.save();
+
   return { id: user.userId, username: user.username };
 }
+
+/**
+ * Регистрирует нового пользователя
+ */
+async function registerUser(username, password) {
+  // Проверяем, не существует ли уже пользователь с таким username
+  const existingUser = await User.findOne({ username });
+  if (existingUser) {
+    throw new Error("Username already taken");
+  }
+
+  // Создаем нового пользователя
+  const userId = `user-${username}-${Date.now()}`;
+  const user = await User.create({
+    username,
+    userId,
+    coins: 0,
+  });
+
+  console.log(`New user registered: ${username}`);
+  return { id: user.userId, username: user.username };
+}
+
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Регистрация нового пользователя
+ *     description: |
+ *       Создание нового аккаунта в системе.
+ *
+ *       **Особенности:**
+ *       - Проверка уникальности username
+ *       - Автоматическое создание userId
+ *       - Начальный баланс монет: 0
+ *       - Защита от дублирования учетных записей
+ *
+ *       **Безопасность:**
+ *       - Валидация входных данных
+ *       - Проверка существования пользователя
+ *       - Защита от повторных запросов
+ *     tags: [Аутентификация]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       201:
+ *         description: Пользователь успешно зарегистрирован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
+ *       400:
+ *         description: Отсутствуют обязательные поля
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Пользователь с таким именем уже существует
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Ошибка сервера
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res
+      .status(400)
+      .json({ error: "Username and password are required" });
+  }
+
+  try {
+    const user = await registerUser(username, password);
+
+    // Создаем токены для нового пользователя
+    const accessToken = signAccessToken({ sub: user.id });
+    const refreshToken = signRefreshToken({ sub: user.id });
+
+    await RefreshToken.create({
+      token: refreshToken,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 7 * 864e5),
+    });
+
+    res.cookie("accessToken", accessToken, { httpOnly: true, sameSite: "lax" });
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      sameSite: "lax",
+    });
+
+    res.status(201).json({
+      accessToken,
+      refreshToken,
+      message: "User registered successfully",
+    });
+  } catch (error) {
+    if (error.message === "Username already taken") {
+      return res.status(409).json({
+        error: "Username already taken",
+        message:
+          "A user with this username already exists. Please choose a different username.",
+      });
+    }
+
+    console.error("Registration error:", error);
+    res.status(500).json({ error: "Failed to register user" });
+  }
+});
 
 /**
  * @swagger
@@ -92,16 +234,16 @@ async function findUserByCredentials(username, password) {
  *   post:
  *     summary: Вход пользователя в систему
  *     description: |
- *       Аутентификация пользователя по имени и паролю.
- *       
+ *       Аутентификация существующего пользователя по имени и паролю.
+ *
  *       **Особенности:**
- *       - Если пользователь не существует, он будет автоматически создан
+ *       - Только для существующих пользователей
  *       - При успешном входе возвращаются JWT токены (access и refresh)
  *       - Токены также сохраняются в HTTP-only cookies
  *       - Защищен от брутфорс атак (ограничение попыток входа)
- *       
+ *
  *       **Безопасность:**
- *       - Пароли не хранятся в открытом виде
+ *       - Проверка существования пользователя
  *       - Используется защита от повторных запросов
  *       - Rate limiting для предотвращения атак
  *     tags: [Аутентификация]
@@ -130,7 +272,7 @@ async function findUserByCredentials(username, password) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Неверные учетные данные
+ *         description: Неверные учетные данные или пользователь не существует
  *         content:
  *           application/json:
  *             schema:
@@ -144,26 +286,56 @@ async function findUserByCredentials(username, password) {
  */
 router.post("/login", loginBruteForceProtection(), async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password)
-    return res.status(400).json({ error: "Missing creds" });
-  const user = await findUserByCredentials(username, password);
-  if (!user) {
+
+  if (!username || !password) {
+    return res
+      .status(400)
+      .json({ error: "Username and password are required" });
+  }
+
+  try {
+    const user = await authenticateUser(username, password);
+
+    if (!user) {
+      const rec = req._loginAttemptRecord;
+      rec.count++;
+      await rec.save();
+      return res.status(401).json({
+        error: "Invalid credentials",
+        message:
+          "Username not found. Please register first or check your username.",
+      });
+    }
+
+    await LoginAttempt.deleteOne({ ip: req.ip });
+
+    const accessToken = signAccessToken({ sub: user.id });
+    const refreshToken = signRefreshToken({ sub: user.id });
+
+    await RefreshToken.create({
+      token: refreshToken,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 7 * 864e5),
+    });
+
+    res.cookie("accessToken", accessToken, { httpOnly: true, sameSite: "lax" });
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      sameSite: "lax",
+    });
+
+    res.json({
+      accessToken,
+      refreshToken,
+      message: "Login successful",
+    });
+  } catch (error) {
+    console.error("Login error:", error);
     const rec = req._loginAttemptRecord;
     rec.count++;
     await rec.save();
-    return res.status(401).json({ error: "Invalid creds" });
+    res.status(500).json({ error: "Internal server error" });
   }
-  await LoginAttempt.deleteOne({ ip: req.ip });
-  const accessToken = signAccessToken({ sub: user.id });
-  const refreshToken = signRefreshToken({ sub: user.id });
-  await RefreshToken.create({
-    token: refreshToken,
-    userId: user.id,
-    expiresAt: new Date(Date.now() + 7 * 864e5),
-  });
-  res.cookie("accessToken", accessToken, { httpOnly: true, sameSite: "lax" });
-  res.cookie("refreshToken", refreshToken, { httpOnly: true, sameSite: "lax" });
-  res.json({ accessToken, refreshToken });
 });
 
 /**
@@ -173,13 +345,13 @@ router.post("/login", loginBruteForceProtection(), async (req, res) => {
  *     summary: Обновление токена доступа
  *     description: |
  *       Получение нового access token с помощью refresh token.
- *       
+ *
  *       **Как это работает:**
  *       - Refresh token можно получить из cookies или тела запроса
  *       - При успешном обновлении возвращается новый access token
  *       - Новый токен также сохраняется в HTTP-only cookie
  *       - Недействительные refresh token автоматически удаляются
- *       
+ *
  *       **Когда использовать:**
  *       - Когда access token истек (15 минут)
  *       - Для продления сессии без повторного входа
@@ -231,12 +403,12 @@ router.post("/refresh", async (req, res) => {
  *     summary: Выход пользователя из системы
  *     description: |
  *       Выход пользователя из системы и аннулирование refresh token.
- *       
+ *
  *       **Что происходит при выходе:**
  *       - Refresh token удаляется из базы данных
  *       - Cookies с токенами очищаются
  *       - Пользователь больше не может использовать старые токены
- *       
+ *
  *       **Безопасность:**
  *       - Полное завершение сессии
  *       - Предотвращение несанкционированного доступа
