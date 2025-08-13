@@ -1,219 +1,313 @@
-# 🎮 GeeksGame API
+# GeeksGame Backend API
 
-<div align="center">
+Backend API для игры GeeksGame с системой аутентификации и управления пользователями.
 
-![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)
-![Express.js](https://img.shields.io/badge/Express.js-404D59?style=for-the-badge)
-![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white)
-![JWT](https://img.shields.io/badge/JWT-black?style=for-the-badge&logo=JSON%20web%20tokens)
+## 🚀 Возможности
 
-**Backend API для игровой платформы с современной архитектурой и безопасностью**
+- **Аутентификация**: Регистрация, вход, выход, обновление токенов
+- **Безопасность**: Хеширование паролей, JWT токены, защита от атак
+- **Валидация**: Проверка входных данных, требования к паролям
+- **Rate Limiting**: Защита от DDoS атак
+- **Swagger**: Автоматическая документация API
+- **MongoDB**: Хранение данных пользователей
 
-[🚀 Быстрый старт](#-быстрый-старт) •
-[📚 Документация](#-api-документация) •
-[🧪 Тестирование](#-тестирование-api) •
-[⚙️ Конфигурация](#️-конфигурация)
+## 📋 Требования
 
-</div>
-
----
-
-## ✨ Особенности
-
-- 🔐 **JWT аутентификация** с refresh токенами
-- 👤 **Управление пользователями** и профилями
-- 🏆 **Система лидеров** и достижений
-- 🛡️ **Продвинутая безопасность** (Helmet, CORS, Rate Limiting)
-- 📊 **Swagger документация** с интерактивным UI
-- 🌍 **GeoIP определение** локации пользователей
-- 🔄 **Защита от дублирующих запросов**
-- 📈 **Логирование** всех операций
-
-## 🚀 Быстрый старт
-
-### Предварительные требования
-
-- Node.js >= 16.0.0
-- MongoDB >= 4.4
+- Node.js 18+
+- MongoDB 5+
 - npm или yarn
 
-### Установка
+## 🛠️ Установка
+
+1. Клонируйте репозиторий:
 
 ```bash
-# Клонируйте репозиторий
 git clone <repository-url>
-cd geeksgame
+cd geeksGame
+```
 
-# Установите зависимости
+2. Установите зависимости:
+
+```bash
 npm install
-
-# Создайте файл .env (см. раздел Конфигурация)
-cp .env.example .env
-
-# Запустите в режиме разработки
-npm run dev
 ```
 
-Сервер будет доступен по адресу: `http://localhost:3000`
-
-### Доступные команды
-
-| Команда            | Описание                   |
-| ------------------ | -------------------------- |
-| `npm start`        | Запуск production сервера  |
-| `npm run dev`      | Запуск с автоперезагрузкой |
-| `npm run test-api` | Запуск API тестов          |
-
-## 📚 API Документация
-
-### 🎯 Swagger UI
-
-Интерактивная документация доступна по адресу:
-**http://localhost:3000/api/docs/**
-
-> ⚠️ **Важно**: В production режиме документация недоступна по соображениям безопасности
-
-### 🔗 Основные endpoints
-
-| Группа     | Endpoint                    | Описание                   |
-| ---------- | --------------------------- | -------------------------- |
-| **Health** | `GET /`                     | Проверка работоспособности |
-| **Auth**   | `POST /auth/login`          | Авторизация пользователя   |
-| **Auth**   | `POST /auth/register`       | Регистрация пользователя   |
-| **Auth**   | `POST /auth/refresh`        | Обновление токенов         |
-| **Auth**   | `POST /auth/logout`         | Выход из системы           |
-| **Users**  | `GET /api/user/profile`     | Получение профиля          |
-| **Users**  | `PUT /api/user/profile`     | Обновление профиля         |
-| **Users**  | `GET /api/user/leaderboard` | Таблица лидеров            |
-
-## 🧪 Тестирование API
-
-### Автоматическое тестирование
-
-```bash
-npm run test-api
-```
-
-### Ручное тестирование
-
-```bash
-# Проверка состояния сервера
-curl http://localhost:3000/
-
-# Регистрация нового пользователя
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testuser","email":"test@example.com","password":"password123"}'
-```
-
-## ⚙️ Конфигурация
-
-### Переменные окружения
-
-Создайте файл `.env` в корне проекта:
+3. Создайте файл `.env` в корневой директории:
 
 ```env
-# 🖥️ Server Configuration
 PORT=3000
-NODE_ENV=development
-
-# 🗄️ Database
 MONGODB_URL=mongodb://localhost:27017/geeksgame
-
-# 🔐 JWT Secrets (генерируйте сложные ключи для production!)
-JWT_ACCESS_SECRET=your-super-secret-access-key-min-32-chars
-JWT_REFRESH_SECRET=your-super-secret-refresh-key-min-32-chars
-
-# 🌐 CORS Configuration
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173
+JWT_ACCESS_SECRET=your-super-secret-access-key
+JWT_REFRESH_SECRET=your-super-secret-refresh-key
+NODE_ENV=development
+ENABLE_SWAGGER_DOCS=true
 ```
 
-### Структура проекта
+4. Запустите MongoDB:
 
-```
-geeksGame/
-│
-├── 📁 config/           # Конфигурационные файлы
-├── 📁 middlewares/      # Express middleware
-├── 📁 models/           # Mongoose модели
-├── 📁 routes/           # API маршруты
-│   ├── auth.js         # Аутентификация
-│   └── user.js         # Управление пользователями
-├── 📁 utils/            # Утилиты и хелперы
-├── 📄 server.js         # Основной файл сервера
-├── 📄 test-api.js       # Скрипт тестирования
-└── 📄 package.json      # Конфигурация проекта
+```bash
+# Локально
+mongod
+
+# Или используйте Docker
+docker run -d -p 27017:27017 --name mongodb mongo:latest
 ```
 
-## 🛡️ Безопасность
+5. Запустите сервер:
 
-### Защитные механизмы
+```bash
+# Режим разработки
+npm run dev
 
-| Механизм                  | Development | Production         |
-| ------------------------- | ----------- | ------------------ |
-| **Rate Limiting**         | 30 req/min  | 20 req/min         |
-| **Helmet Headers**        | Базовый     | Строгий            |
-| **CORS**                  | Все origins | Только разрешенные |
-| **Swagger Docs**          | ✅ Включен  | ❌ Отключен        |
-| **Request Deduplication** | 5 сек TTL   | 5 сек TTL          |
+# Продакшн
+npm start
+```
 
-### Особенности защиты
+## 🔐 API Аутентификации
 
-- 🔒 **JWT токены** с коротким временем жизни
-- 🚫 **Защита от брутфорс** атак на логин
-- 🌍 **GeoIP трекинг** подозрительной активности
-- 🔄 **Автоматическая ротация** refresh токенов
-- 📝 **Подробное логирование** всех операций
+### Endpoints
 
-## 🚀 Технологический стек
+| Метод  | Путь             | Описание                        |
+| ------ | ---------------- | ------------------------------- |
+| `POST` | `/auth/register` | Регистрация нового пользователя |
+| `POST` | `/auth/login`    | Вход в систему                  |
+| `POST` | `/auth/refresh`  | Обновление access token         |
+| `POST` | `/auth/logout`   | Выход из системы                |
 
-### Backend
+### 1. Регистрация пользователя
 
-- **Node.js** - Серверная среда выполнения
-- **Express.js** - Web фреймворк
-- **MongoDB** - NoSQL база данных
-- **Mongoose** - ODM для MongoDB
+**POST** `/auth/register`
 
-### Безопасность
+Создает нового пользователя в системе.
 
-- **JWT** - Аутентификация и авторизация
-- **bcrypt** - Хеширование паролей
-- **Helmet** - Заголовки безопасности
-- **express-rate-limit** - Ограничение запросов
+**Тело запроса:**
 
-### Разработка
+```json
+{
+  "username": "player123",
+  "password": "securePass123"
+}
+```
 
-- **nodemon** - Автоперезагрузка в dev режиме
-- **Swagger** - Документация API
-- **Morgan** - HTTP логирование
+**Требования к данным:**
 
-## 📈 Мониторинг и логирование
+- `username`: 3-50 символов, только буквы, цифры и подчеркивания
+- `password`: минимум 6 символов, максимум 128, должен содержать букву и цифру
 
-Все запросы автоматически логируются с помощью Morgan:
+**Ответ (201):**
 
-- ✅ HTTP статусы
-- ⏱️ Время ответа
-- 📍 IP адреса и геолокация
-- 🔍 User-Agent информация
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "message": "User registered successfully",
+  "user": {
+    "id": "user-player123-1234567890",
+    "username": "player123",
+    "coins": 0
+  }
+}
+```
 
-## 🤝 Контрибьютинг
+**Ошибки:**
+
+- `400` - Ошибка валидации данных
+- `409` - Пользователь с таким именем уже существует
+- `500` - Внутренняя ошибка сервера
+
+### 2. Вход в систему
+
+**POST** `/auth/login`
+
+Аутентификация существующего пользователя.
+
+**Тело запроса:**
+
+```json
+{
+  "username": "player123",
+  "password": "securePass123"
+}
+```
+
+**Ответ (200):**
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "message": "Login successful",
+  "user": {
+    "id": "user-player123-1234567890",
+    "username": "player123",
+    "coins": 0
+  }
+}
+```
+
+**Ошибки:**
+
+- `400` - Отсутствуют обязательные поля
+- `401` - Неверные учетные данные
+- `429` - Слишком много попыток входа (защита от брутфорс атак)
+- `500` - Внутренняя ошибка сервера
+
+### 3. Обновление токена
+
+**POST** `/auth/refresh`
+
+Получение нового access token с помощью refresh token.
+
+**Тело запроса:**
+
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Ответ (200):**
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Ошибки:**
+
+- `401` - Недействительный refresh token
+
+### 4. Выход из системы
+
+**POST** `/auth/logout`
+
+Выход пользователя и аннулирование refresh token.
+
+**Тело запроса:**
+
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Ответ (200):**
+
+```json
+{
+  "ok": true
+}
+```
+
+## 🔒 Безопасность
+
+### JWT Токены
+
+- **Access Token**: Действует 15 минут, используется для доступа к защищенным ресурсам
+- **Refresh Token**: Действует 7 дней, используется для обновления access token
+
+### Хеширование паролей
+
+- Используется bcrypt с 12 раундами соли
+- Пароли никогда не хранятся в открытом виде
+
+### Защита от атак
+
+- **Rate Limiting**: 30 запросов в минуту на IP адрес
+- **Brute Force Protection**: Ограничение попыток входа
+- **Duplicate Request Prevention**: Защита от повторных запросов
+- **Security Headers**: Helmet.js для защиты от уязвимостей
+
+### Cookies
+
+- HTTP-only cookies для токенов
+- Secure flag в продакшене
+- SameSite=Lax для защиты от CSRF
+
+## 📊 Модели данных
+
+### User
+
+```javascript
+{
+  username: String,        // Уникальное имя пользователя
+  password: String,        // Хешированный пароль
+  userId: String,          // Уникальный ID пользователя
+  coins: Number,           // Количество монет
+  createdAt: Date,         // Дата создания
+  lastActive: Date         // Последняя активность
+}
+```
+
+### RefreshToken
+
+```javascript
+{
+  token: String,           // JWT refresh token
+  userId: String,          // ID пользователя
+  expiresAt: Date          // Дата истечения
+}
+```
+
+## 🧪 Тестирование
+
+Запустите тесты API:
+
+```bash
+# Базовое тестирование
+node test-auth.js
+
+# Финальное тестирование с задержками
+node test-auth-final.js
+```
+
+## 📚 Документация Swagger
+
+В режиме разработки документация доступна по адресу:
+
+```
+http://localhost:3000/api/docs
+```
+
+## 🚀 Скрипты
+
+- `npm run dev` - Запуск в режиме разработки с nodemon
+- `npm start` - Запуск в продакшн режиме
+- `npm test` - Запуск тестов (пока не настроено)
+
+## 🔧 Конфигурация
+
+Основные настройки в `config/env.js`:
+
+- Порт сервера
+- URL MongoDB
+- Секреты JWT
+- Время жизни токенов
+- Настройки безопасности
+
+## 📝 Логирование
+
+- Логирование подозрительной активности
+- Логирование попыток входа
+- Логирование ошибок
+
+## 🤝 Вклад в проект
 
 1. Форкните репозиторий
-2. Создайте feature ветку (`git checkout -b feature/amazing-feature`)
-3. Зафиксируйте изменения (`git commit -m 'Add amazing feature'`)
-4. Отправьте в ветку (`git push origin feature/amazing-feature`)
-5. Откройте Pull Request
+2. Создайте ветку для новой функции
+3. Внесите изменения
+4. Создайте Pull Request
 
 ## 📄 Лицензия
 
-Этот проект лицензирован под ISC лицензией.
+ISC License
 
----
+## 🆘 Поддержка
 
-<div align="center">
+При возникновении проблем:
 
-**Создано с ❤️ для GeeksGame**
-
-[⬆️ Наверх](#-geeksgame-api)
-
-</div>
+1. Проверьте логи сервера
+2. Убедитесь, что MongoDB запущен
+3. Проверьте настройки в `.env` файле
+4. Создайте Issue в репозитории

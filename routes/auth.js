@@ -8,6 +8,12 @@ import {
 import { RefreshToken } from "../models/RefreshToken.js";
 import { LoginAttempt } from "../models/LoginAttempt.js";
 import { User } from "../models/User.js";
+import {
+  hashPassword,
+  verifyPassword,
+  validatePassword,
+  validateUsername,
+} from "../utils/passwordUtils.js";
 
 const router = express.Router();
 
@@ -32,6 +38,23 @@ const router = express.Router();
  *           description: Пароль пользователя
  *           example: "password123"
  *           minLength: 6
+ *     RegisterRequest:
+ *       type: object
+ *       required:
+ *         - username
+ *         - password
+ *       properties:
+ *         username:
+ *           type: string
+ *           description: Имя пользователя для регистрации
+ *           example: "newplayer123"
+ *           minLength: 3
+ *           maxLength: 50
+ *         password:
+ *           type: string
+ *           description: Пароль пользователя
+ *           example: "securePass123"
+ *           minLength: 6
  *     LoginResponse:
  *       type: object
  *       properties:
@@ -47,6 +70,18 @@ const router = express.Router();
  *           type: string
  *           description: Сообщение о результате операции
  *           example: "Login successful"
+ *         user:
+ *           type: object
+ *           properties:
+ *             id:
+ *               type: string
+ *               description: ID пользователя
+ *             username:
+ *               type: string
+ *               description: Имя пользователя
+ *             coins:
+ *               type: number
+ *               description: Количество монет
  *     ErrorResponse:
  *       type: object
  *       properties:
@@ -58,6 +93,11 @@ const router = express.Router();
  *           type: string
  *           description: Подробное описание ошибки
  *           example: "A user with this username already exists. Please choose a different username."
+ *         details:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Детали ошибок валидации
  *     RefreshRequest:
  *       type: object
  *       properties:
@@ -97,15 +137,21 @@ async function authenticateUser(username, password) {
     return null; // Пользователь не найден
   }
 
-  // Здесь должна быть проверка пароля
-  // Поскольку в текущей модели пароль не хранится,
-  // мы будем считать, что пользователь аутентифицирован по username
-  // В реальном приложении здесь должна быть проверка хеша пароля
+  // Проверяем пароль
+  const isPasswordValid = await verifyPassword(password, user.password);
+  if (!isPasswordValid) {
+    return null; // Неверный пароль
+  }
 
+  // Обновляем время последней активности
   user.lastActive = new Date();
   await user.save();
 
-  return { id: user.userId, username: user.username };
+  return {
+    id: user.userId,
+    username: user.username,
+    coins: user.coins,
+  };
 }
 
 /**
@@ -118,37 +164,183 @@ async function registerUser(username, password) {
     throw new Error("Username already taken");
   }
 
+  // Хешируем пароль
+  const hashedPassword = await hashPassword(password);
+
   // Создаем нового пользователя
   const userId = `user-${username}-${Date.now()}`;
   const user = await User.create({
     username,
+    password: hashedPassword,
     userId,
     coins: 0,
   });
 
   console.log(`New user registered: ${username}`);
-  return { id: user.userId, username: user.username };
+  return {
+    id: user.userId,
+    username: user.username,
+    coins: user.coins,
+  };
 }
+
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Регистрация нового пользователя
+ *     description: |
+ *       Создание нового аккаунта в системе.
+ *
+ *       **Особенности:**
+ *       - Проверка уникальности username
+ *       - Валидация пароля по требованиям безопасности
+ *       - Автоматическое хеширование пароля
+ *       - Автоматическое создание userId
+ *       - Начальный баланс монет: 0
+ *       - Защита от дублирования учетных записей
+ *
+ *       **Требования к паролю:**
+ *       - Минимум 6 символов
+ *       - Максимум 128 символов
+ *       - Должен содержать хотя бы одну букву и одну цифру
+ *
+ *       **Требования к username:**
+ *       - Минимум 3 символа
+ *       - Максимум 50 символов
+ *       - Только буквы, цифры и подчеркивания
+ *
+ *       **Безопасность:**
+ *       - Валидация входных данных
+ *       - Проверка существования пользователя
+ *       - Защита от повторных запросов
+ *       - Хеширование паролей с солью
+ *     tags: [Аутентификация]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterRequest'
+ *     responses:
+ *       201:
+ *         description: Пользователь успешно зарегистрирован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
+ *       400:
+ *         description: Ошибка валидации данных
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Пользователь с таким именем уже существует
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Ошибка сервера
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+
+  // Валидация входных данных
+  const usernameValidation = validateUsername(username);
+  const passwordValidation = validatePassword(password);
+
+  const validationErrors = [
+    ...usernameValidation.errors,
+    ...passwordValidation.errors,
+  ];
+
+  if (validationErrors.length > 0) {
+    return res.status(400).json({
+      error: "Validation failed",
+      message: "Invalid input data",
+      details: validationErrors,
+    });
+  }
+
+  try {
+    const user = await registerUser(username, password);
+
+    // Создаем токены для нового пользователя
+    const accessToken = signAccessToken({ sub: user.id });
+    const refreshToken = signRefreshToken({ sub: user.id });
+
+    await RefreshToken.create({
+      token: refreshToken,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 7 * 864e5),
+    });
+
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 15 * 60 * 1000, // 15 минут
+    });
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 дней
+    });
+
+    res.status(201).json({
+      accessToken,
+      refreshToken,
+      message: "User registered successfully",
+      user: {
+        id: user.id,
+        username: user.username,
+        coins: user.coins,
+      },
+    });
+  } catch (error) {
+    if (error.message === "Username already taken") {
+      return res.status(409).json({
+        error: "Username already taken",
+        message:
+          "A user with this username already exists. Please choose a different username.",
+      });
+    }
+
+    console.error("Registration error:", error);
+    res.status(500).json({
+      error: "Failed to register user",
+      message: "Internal server error during registration",
+    });
+  }
+});
 
 /**
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Вход в систему
+ *     summary: Вход пользователя в систему
  *     description: |
- *       Аутентификация пользователя по имени и паролю.
+ *       Аутентификация существующего пользователя по имени и паролю.
  *
  *       **Особенности:**
- *       - Если пользователь не существует, он будет автоматически создан
- *       - Если пользователь существует, выполняется вход
- *       - При успешной операции возвращаются JWT токены (access и refresh)
+ *       - Только для существующих пользователей
+ *       - При успешном входе возвращаются JWT токены (access и refresh)
  *       - Токены также сохраняются в HTTP-only cookies
  *       - Защищен от брутфорс атак (ограничение попыток входа)
  *
  *       **Безопасность:**
- *       - Автоматическое создание новых пользователей
+ *       - Проверка существования пользователя
+ *       - Верификация хешированного пароля
  *       - Используется защита от повторных запросов
  *       - Rate limiting для предотвращения атак
+ *       - Защита от брутфорс атак
  *     tags: [Аутентификация]
  *     requestBody:
  *       required: true
@@ -168,14 +360,14 @@ async function registerUser(username, password) {
  *             description: HTTP-only cookies с токенами
  *             schema:
  *               type: string
- *       201:
- *         description: Пользователь успешно создан и вошел в систему
+ *       400:
+ *         description: Отсутствуют обязательные поля (username или password)
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/LoginResponse'
- *       400:
- *         description: Отсутствуют обязательные поля (username или password)
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Неверные учетные данные или пользователь не существует
  *         content:
  *           application/json:
  *             schema:
@@ -191,35 +383,33 @@ router.post("/login", loginBruteForceProtection(), async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
-    return res
-      .status(400)
-      .json({ error: "Username and password are required" });
+    return res.status(400).json({
+      error: "Missing credentials",
+      message: "Username and password are required",
+    });
   }
 
   try {
-    // Сначала пытаемся найти существующего пользователя
-    let user = await authenticateUser(username, password);
-    let isNewUser = false;
+    const user = await authenticateUser(username, password);
 
-    // Если пользователь не найден, регистрируем его
     if (!user) {
-      try {
-        user = await registerUser(username, password);
-        isNewUser = true;
-        console.log(`New user registered via login: ${username}`);
-      } catch (registerError) {
-        if (registerError.message === "Username already taken") {
-          return res.status(409).json({
-            error: "Username already taken",
-            message:
-              "A user with this username already exists. Please choose a different username.",
-          });
-        }
-        throw registerError;
+      const rec = req._loginAttemptRecord;
+      if (rec) {
+        rec.count++;
+        await rec.save();
       }
+      return res.status(401).json({
+        error: "Invalid credentials",
+        message:
+          "Invalid username or password. Please check your credentials and try again.",
+      });
     }
 
-    // Создаем токены для пользователя
+    // Удаляем запись о попытке входа при успешной аутентификации
+    if (req._loginAttemptRecord) {
+      await LoginAttempt.deleteOne({ ip: req.ip });
+    }
+
     const accessToken = signAccessToken({ sub: user.id });
     const refreshToken = signRefreshToken({ sub: user.id });
 
@@ -229,32 +419,40 @@ router.post("/login", loginBruteForceProtection(), async (req, res) => {
       expiresAt: new Date(Date.now() + 7 * 864e5),
     });
 
-    res.cookie("accessToken", accessToken, { httpOnly: true, sameSite: "lax" });
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 15 * 60 * 1000, // 15 минут
+    });
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 дней
     });
 
-    // Возвращаем соответствующий статус и сообщение
-    if (isNewUser) {
-      res.status(201).json({
-        accessToken,
-        refreshToken,
-        message: "User registered and logged in successfully",
-      });
-    } else {
-      res.json({
-        accessToken,
-        refreshToken,
-        message: "Login successful",
-      });
-    }
+    res.json({
+      accessToken,
+      refreshToken,
+      message: "Login successful",
+      user: {
+        id: user.id,
+        username: user.username,
+        coins: user.coins,
+      },
+    });
   } catch (error) {
-    console.error("Login/Register error:", error);
+    console.error("Login error:", error);
     const rec = req._loginAttemptRecord;
-    rec.count++;
-    await rec.save();
-    res.status(500).json({ error: "Internal server error" });
+    if (rec) {
+      rec.count++;
+      await rec.save();
+    }
+    res.status(500).json({
+      error: "Internal server error",
+      message: "An error occurred during login. Please try again later.",
+    });
   }
 });
 
